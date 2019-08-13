@@ -13,6 +13,9 @@ class MRP(MarkovChain):
         [self.S, _] = P.shape
         assert R.ndim == 1 and R.shape[0] == P.shape[0] == P.shape[1]
 
+    def __iter__(self):
+        return iter([self.s0, self.P, self.gamma, self.R])
+
     #___________________________________________________________________________
     # Simulation
 
@@ -28,13 +31,12 @@ class MRP(MarkovChain):
     # Important quantities
 
     def J(self):
-        "Expected value of MRP"
-        #equivalently: self.V() @ self.s0
-        return self.R @ self.d() / (1-self.gamma)
+        "Expected value of the MRP"
+        return self.s0 @ self.V()
 
     def V(self):
         "Value function"
-        return linalg.solve(self.M, self.R)
+        return self.solve(self.R)
 
     #___________________________________________________________________________
     # Operators

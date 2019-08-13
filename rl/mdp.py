@@ -1,6 +1,6 @@
 import numpy as np
 import cvxpy as cp
-from arsenal.maths import sample, random_dist
+from arsenal.maths import sample, random_dist, logsumexp, softmax
 from numpy.random import uniform
 from scipy import linalg
 
@@ -180,43 +180,43 @@ class DiscountedMDP(MDP):
     #___________________________________________________________________________
     # Implicit functions
 
-    def J(self, policy):
-        "Expected value of `policy`."
-        return (self | policy).J()
+    def J(self, π):
+        "Expected value of policy `π`."
+        return (self | π).J()
 
-    def V(self, policy):
-        "Value function for `policy`."
-        return (self | policy).V()
-
-    def d(self, policy):
-        "γ-discounted stationary distribution over states conditioned `policy`."
-        return (self | policy).d()
-
-    def d_(self, π):
+    def d(self, π, jac=False):
         "same a `d(π)`, but includes a Jacobian-vector product callback."
-        γ = self.gamma
-        Φ = self.successor_representation(π)
-        d = (1-γ) * self.s0 @ Φ
 
-        def grad(adj):
-            dA = np.einsum('sp,p,z->zs', Φ, adj, d)
-            return γ * np.einsum('sap,sp->sa', self.P, dA)
+        if not jac:
+            return (self | π).d()
+        else:
+            γ = self.gamma
+            Φ = self.successor_representation(π)
+            d = (1-γ) * self.s0 @ Φ
 
-        return d, grad
+            def grad(adj):
+                dM = np.einsum('sp,p,z->zs', Φ, adj, d)
+                return γ * np.einsum('sap,sp->sa', self.P, dM)
+            return d, grad
 
-    def V_(self, π):
+    def V(self, π, jac=False):
         "same a `V(π)`, but includes a vector-Jacobian product callback."
 
-        γ = self.gamma
-        Φ = self.successor_representation(π)
-        r = np.einsum('sa,sa->s', self.r, π)
-        v = Φ @ r
+        if not jac:
+            return (self | π).V()
 
-        def grad(adj):
-            dA = np.einsum('sp,s,z->pz', Φ, adj, v)
-            return np.einsum('s,sa->sa', adj @ Φ, self.r) + γ * np.einsum('sap,sp->sa', self.P, dA)
+        else:
+            γ = self.gamma
+            Φ = self.successor_representation(π)
+            r = np.einsum('sa,sa->s', self.r, π)
+            v = Φ @ r
 
-        return v, grad
+            def grad(adj):
+                dM = np.einsum('sp,s,z->pz', Φ, adj, v)
+                return np.einsum('s,sa->sa', adj @ Φ, self.r) + γ * np.einsum('sap,sp->sa', self.P, dM)
+            return v, grad
+
+        return v
 
     def successor_representation(self, policy):
         "Dayan's successor representation."
@@ -262,6 +262,8 @@ class DiscountedMDP(MDP):
           Π R = R_π = E[ r | π ]
           P Π = Pr[ <s', a'> | s, a ]
 
+        This definition is used in Lagoudakis and Parr (2003) and Wang et al. (2008).
+
         """
 
         Π = np.zeros((self.S, self.S, self.A))
@@ -290,10 +292,29 @@ class DiscountedMDP(MDP):
         "Bellman operator."
         # Act greedily according to one-step lookahead on V.
         Q = self.Q_from_V(V)
-        pi = np.zeros((self.S, self.A))
-        pi[range(self.S), Q.argmax(axis=1)] = 1
+        if 1:
+            π = np.zeros((self.S, self.A))
+            π[range(self.S), Q.argmax(axis=1)] = 1
+        else:
+            # π will be uniformly random over equally good actions.
+            π = Q == Q.max(axis=1)[:,None]
+            π = π / π.sum(axis=1)[:,None]
         v = Q.max(axis=1)
-        return v, pi
+        return v, π
+
+    # TODO: There are many other smooth operators, e.g., sparsemax, mellowmean
+    # (Asadi & Littman), Boltzman.
+
+    def SB(self, V, τ):
+        """Soft-Bellman operator: A smooth approximation to the Bellman operator.
+
+        As the temperature parameter τ→0, the smoothed Bellman operator SB(V)
+        approaches the nonsmooth Bellman operator B(V).
+        """
+        Q = self.Q_from_V(V) / τ
+        v = logsumexp(Q, axis=1) * τ
+        π = softmax(Q, axis=1)
+        return v, π
 
     def Q_from_V(self, V):
         "Lookahead by a single action from value function estimate `V`."

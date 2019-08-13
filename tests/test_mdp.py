@@ -1,10 +1,34 @@
 import numpy as np
 import pylab as pl
-from arsenal.maths import compare, onehot, random_dist, is_distribution
+from arsenal.maths import compare, onehot, random_dist, is_distribution, spherical, fdcheck
 from arsenal import colors, iterview
 ok = colors.green % 'ok'
 
-from rl.mdp import DiscountedMDP, FiniteHorizonMDP, MRP, random_MDP
+from rl.mdp import DiscountedMDP, MRP, random_MDP
+
+
+def random_mrp(S, gamma=0.3):
+    # Randomly generate and MDP.
+    return MRP(
+        s0 = random_dist(S),
+        R = np.random.uniform(0,1,size=S),
+        P = random_dist(S, S),
+        gamma = gamma,
+    )
+
+
+def test():
+    M = random_MDP(20, 5, 0.7)
+
+    test_solve(M)
+    test_policy_matrix(M)
+    test_stationary(M)
+    test_lp_solver(M)
+    test_performance_difference_lemma_discounted(M)
+    test_potential_based_shaping(M)
+    test_gradients(M)
+    test_smooth(M)
+    test_J(M)
 
 
 def test_lp_solver(M):
@@ -143,6 +167,8 @@ def test_performance_difference_lemma_discounted(M):
     #
     #   - V* is also an interesting case, which is closer to the SEARN case.
 
+    # TODO: PD-lemma and the derivative of a policy mixture.
+
     p = random_dist(M.S, M.A)
     q = random_dist(M.S, M.A)
 
@@ -152,48 +178,6 @@ def test_performance_difference_lemma_discounted(M):
     z = 1/(1-M.gamma) * sum(dp[s] * p[s,:] @ Aq[s,:] for s in range(M.S))
 
     assert np.allclose(M.J(p) - M.J(q), z)
-    print('[pd-lemma]', ok)
-
-
-def test_finite_horizon():
-    print()
-    print('Finite-horizon tests:', ok)
-
-    S = 10
-    A = 3
-    M = FiniteHorizonMDP(
-        s0 = random_dist(S),
-        R = np.random.uniform(0,1,size=(S,A,S)),
-        P = random_dist(S,A,S),
-        T = 20,
-    )
-
-    p = random_dist(M.S, M.A)
-    assert abs(M.d(p).sum() - M.T)/M.T < 1e-5
-
-    test_pd_lemma_finite_horizon(M)
-
-
-def test_pd_lemma_finite_horizon(M):
-    """
-    Evaluate performance difference of `p` over `q` based on roll-outs from on
-    `q` and roll-ins from `p`.
-    """
-    p = random_dist(M.S, M.A)
-    q = random_dist(M.S, M.A)
-
-    Jq,Vq,Qq = M.value(q)   # Roll-out with q
-    dp = M.d(p)             # Roll-in with p. Note that dp sums to T, not 1.
-    #assert dp.sum() == M.T
-
-    Jp,_,_ = M.value(p)     # Value p.
-    # Accumulate advantages of p over q.
-    z = 0.0
-    for t in range(M.T):
-        for s in range(M.S):
-            A = p[s,:] @ Qq[t,s,:] - Vq[t,s]
-            z += dp[t,s] * A
-    assert np.allclose(Jp - Jq, z)
     print('[pd-lemma]', ok)
 
 
@@ -219,12 +203,7 @@ def test_policy_matrix(M):
     print('[policy matrix]', colors.light.green % 'ok')
 
 
-def main():
-    M = random_MDP(20, 5, 0.7)
-    γ = M.gamma
-
-    test_policy_matrix(M)
-
+def test_solve(M):
     vi = M.solve_by_value_iteration()
     PI = M.solve_by_policy_iteration()
     assert np.allclose(vi['V'], PI['V'])
@@ -241,13 +220,6 @@ def main():
     assert abs(J - vi['obj']) / abs(J) < 0.01
     print('value of policy matches VI', ok)
 
-    mrp = M.mrp(π)
-    sv = mrp.successor_representation() @ mrp.R
-    assert np.allclose(sv, vi['V'])
-    assert np.allclose(M.successor_representation(π),
-                       np.linalg.inv(np.eye(M.S) - γ * mrp.P))
-    print('successor representation', ok)
-
     v = M.V(π)
     assert np.allclose(v, vi['V'])
     print('value function', ok)
@@ -259,44 +231,8 @@ def main():
     assert np.allclose(Q, M.Q_by_linalg(π))
     print('check Q by linalg', ok)
 
-    test_stationary(mrp)
-    test_lp_solver(M)
-    test_performance_difference_lemma_discounted(M)
-    test_potential_based_shaping(M)
-
-
-def random_mrp(S, gamma=0.3):
-    # Randomly generate and MDP.
-    return MRP(
-        s0 = random_dist(S),
-        R = np.random.uniform(0,1,size=S),
-        P = random_dist(S, S),
-        gamma = gamma,
-    )
-
 
 def test_J(M):
-    J0 = M.J()
-
-    j1 = M.V() @ M.s0
-    j3 = M.R @ M.d() / (1-M.gamma)
-
-    # [2018-09-26 Wed] The following idea was tempting, but wrong! Here is where
-    # my logic broke down: In the case of MDPs, we can use the performance
-    # difference lemma (PD) to create a similar equation.  However, PD relates
-    # the expected advantage function under a stationary distribution to the
-    # difference of J's.  In the special case of a single PD of a policy verus
-    # itself, we have that J'-J should be zero.  Note that the advantage of a
-    # policy against itself is just the reward function.
-
-    #j2 = M.V() @ M.d() / (1-M.gamma)  # <=== INCORRECT!
-
-
-    assert np.allclose(J0, j1)
-    #assert np.allclose(J0, j2), [J0, j2]
-    assert np.allclose(J0, j3)
-
-
     # Test a single-state MRP
     # Sanity check: Why is there a 1/(1-γ) here?
     # if there is 1 state {
@@ -308,6 +244,42 @@ def test_J(M):
     # }
     m1 = random_mrp(1)
     assert np.allclose(m1.J(), m1.R / (1-m1.gamma))
+
+    # Test equivalence of various methods for computing J.
+    π = random_dist(M.S, M.A)
+    [α, _, γ, r] = m = M | π
+
+    T = 1 / (1-γ)
+
+    J_by_V = α @ m.V()
+    J_by_d = T * m.d() @ r
+    J_by_S = α @ m.successor_representation() @ r
+
+    J = m.J()
+    assert np.allclose(J_by_d, J)
+    assert np.allclose(J_by_S, J)
+    assert np.allclose(J_by_V, J)
+
+    # The reason why we have this equivalence is simply because of where we put
+    # the parentheses
+    #   (α @ m.successor_representation()) @ r
+    #     = T dᵀ @ r
+    # vs
+    #   α @ (m.successor_representation() @ r)
+    #     = α @ v
+
+    assert np.allclose(α @ m.successor_representation(), T * m.d())
+    assert np.allclose(m.successor_representation() @ r, m.V())
+
+    # [2018-09-26 Wed] The following idea was tempting, but wrong! Here is where
+    # my logic broke down: In the case of MDPs, we can use the performance
+    # difference lemma (PD) to create a similar equation.  However, PD relates
+    # the expected advantage function under a stationary distribution to the
+    # difference of J's.  In the special case of a single PD of a policy versus
+    # itself, we have that J'-J should be zero.  Note that the advantage of a
+    # policy against itself is just the reward function.
+    #
+    # J_by_dV = T @ M.d() @ M.V()   # <=== INCORRECT!
 
     print('[test J]', ok)
 
@@ -362,6 +334,10 @@ def test_J(M):
 
 def test_stationary(M):
     print('[test stationary]')
+
+    π = random_dist(M.S, M.A)
+    [α, _, γ, r] = M = M | π
+
     d1 = M.d()
     d2 = M.d_by_eigen()
     assert compare(d1, d2).max_relative_error < 1e-5
@@ -369,6 +345,7 @@ def test_stationary(M):
     J0 = M.J()
 
     if 1:
+        # TODO: Use the simulate method instead of duplicating like we do below.
         p = np.zeros(M.S)
         J = 0.0
         N = 10_000
@@ -395,55 +372,108 @@ def test_stationary(M):
             pl.show()
 
 
-# TODO: unfinished
-# Singh & Yee, 1993 "An Upper Bound on the Loss from Approximate Optimal-Value Functions"
-# http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.115.8149&rep=rep1&type=pdf
-def test_SinghYee_VFA_bound(M):
+def test_gradients(M):
 
-    opt = M.solve()['policy']
-    Vopt = M.V(opt)
-    Jopt = M.J(opt)
+    J = lambda: M.J(π)
 
-    data = []
-    for _ in iterview(range(10000)):
+    π = random_dist(M.S, M.A)
+    r = M.r
 
-        vfa = np.random.uniform(-10,10,size=M.S)
+    # The policy gradient theorem
+    fdcheck(J, π,
+            1/(1-M.gamma) * M.d(π)[:,None] * M.Q(π),    # Note: not Q is not interchangeable with Advantage!
+    ) #.show(title='policy gradient v1.')
 
-        # let epsilon be the error in a value function approximator
-        epsilon = np.abs(vfa - Vopt).max()
+    print('[policy gradient theorem]', ok)
 
-        # Note: this requires one-step lookahead knowledge
-        [_, greedy] = M.B(vfa)
-        actual = Jopt - M.J(greedy)
+    # Jacobians of the implicit d(p) and v(p) functions.
+    z = spherical(M.S)
+    _d, d_grad = M.d(π, jac=True)
+    fdcheck(lambda: z @ M.d(π), π, d_grad(z))#.show(title='implicit d')
+    _v, v_grad = M.V(π, jac=True)
+    fdcheck(lambda: z @ M.V(π), π, v_grad(z))#.show(title='implicit v')
 
-        assert actual >= 0
+    # check that the implicit functions are consistent with the other methods for computing them.
+    assert np.allclose(_d, M.d(π))
+    assert np.allclose(_v, M.V(π))
 
-        # it follows that the greedy policy wrt `vfa` has bounded error
-        bound = 2 * M.gamma * epsilon / (1 - M.gamma)
+    # The policy gradient theorem
+#    fdcheck(J, p,
+#            1/(1-M.gamma) * (
+#                np.einsum('s,sa->sa', M.d(p), M.Advantage(p))
+#                + (M.d(p) * M.V(p))[:,None]
+#            )
+#    ) .show(title='policy gradient v1.')
 
-        # There is a simple extension for error in estimate of R
+    # Extract the full Jacobian, flatten SA dim of policy
+    Jdp = np.zeros((M.S, M.S*M.A))
+    for s in range(M.S):
+        Jdp[s, :] = d_grad(onehot(s, M.S)).flat
 
-        # TODO: there is a related bound for estimation error in Q. See corollary 2.
-        # TODO: there is also an extension in terms of one-step error
+    # The stuff below is the chaining from J to derivatives thru π
+    fdcheck(J, π,
+            1/(1-M.gamma)*(np.einsum('sa,sa->s', r, π) @ Jdp
+                           + np.einsum('s,sa->sa', M.d(π), r).flatten())
+    ) #.show(title='policy gradient v2.')
 
-        #print(epsilon, actual, bound)
 
-        data.append({'epsilon': epsilon,
-                     'actual': actual,
-                     'bound': bound})
+    # Extract the full Jacobian, flatten SA dim of policy
+    Jvp = np.zeros((M.S, M.S*M.A))
+    for s in range(M.S):
+        Jvp[s, :] = v_grad(onehot(s, M.S)).flat
+    fdcheck(J, π, M.s0 @ Jvp) #.show(title='policy gradient v2a.')
+    fdcheck(J, π, v_grad(M.s0)) #.show(title='policy gradient v2b.')
 
-    import pandas as pd
-    df = pd.DataFrame(data).sort_values('epsilon')
 
-    pl.yscale('log'); pl.xscale('log')
-    pl.scatter(df.epsilon, df.actual, c='b')
-    pl.plot(df.epsilon, df.bound, c='r')
-    pl.xlabel('epsilon')
-    pl.ylabel('J(opt) - J(greedy wrt est)')
-    pl.show()
+def test_smooth(M):
+
+    # TODO: Should we make policy iteration and value iteration generic in the
+    # fixed-point operator?
+
+    v = np.random.uniform(-1,1,size=M.S)
+
+    τ = 1e-10
+    v1, π1 = M.SB(v, τ)
+    v2, π2 = M.B(v)
+
+    assert np.allclose(v1, v2)
+    assert np.allclose(π1, π2)
+
+    τ = 1e10
+    v1, π1 = M.SB(v, τ)
+
+    assert np.allclose(π1, np.ones((M.S, M.A))/M.A), π1
+    #assert np.allclose(v1, τ + np.log(M.A)), v1
+    #from IPython import embed; embed()
+
+    tol = 1e-8
+
+    # Very crude integration test, check that SB's fixed point roughly matches
+    # B's fixed point at low temperatures.
+    τ = 1e-5
+
+    while True:
+        vp, π = M.SB(v, τ)
+        diff = np.abs(vp - v).max()
+        if diff < tol:
+            break
+        v = vp
+
+    opt = M.solve()
+    opt_π = opt['policy']
+    opt_v = opt['V']
+
+    #print()
+    #print(π)
+    #print(opt_π)
+
+    assert np.abs(π - opt_π).max() <= 1e-10
+    assert np.max(np.abs(v - opt_v) / np.abs(opt_v)) <= 0.001
+
+    #print(v)
+    #print(opt_v)
+    #from IPython import embed; embed()
 
 
 if __name__ == '__main__':
-    main()
-    test_finite_horizon()
-    #test_SinghYee_VFA_bound(random_MDP(20, 5, 0.7))
+    test()

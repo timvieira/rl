@@ -36,6 +36,11 @@ class MarkovChain(object):
     #___________________________________________________________________________
     # Important quantities
 
+    def successor_representation(self):
+        "Dayan's successor representation."
+        #equivalently: linalg.solve(self.M, np.eye(self.S))
+        return np.linalg.inv(self.M)
+
     def d(self):
         "Stationary distribution."
         # The stationary distribution, much like other key quantities in MRPs,
@@ -44,7 +49,7 @@ class MarkovChain(object):
         #   d - γ Pᵀ d = (1-γ) s0
         # (I - γ Pᵀ) d = (1-γ) s0
         # See also: stationarity condition in the linear programming solution
-        return linalg.solve(self.M.T, (1-self.gamma) * self.s0)  # note the transpose
+        return (1-self.gamma) * self.solve_t(self.s0)   # note the transpose
 
     def d_by_eigen(self):
         """
@@ -84,7 +89,13 @@ class MarkovChain(object):
         "Transition matrix with (1-γ)-resetting dynamics."
         return (1-self.gamma)*self.s0[None,:] + self.gamma*self.P
 
-    def successor_representation(self):
-        "Dayan's successor representation."
-        #equivalently: linalg.solve(self.M, np.eye(self.S))
-        return np.linalg.inv(self.M)
+    #___________________________________________________________________________
+    # Operators
+
+    def solve(self, b):
+        "Solve linear system, (I - γ P) x = b"
+        return linalg.solve(self.M, b)
+
+    def solve_t(self, b):
+        "Solve linear system, xᵀ (I - γ P) = b"
+        return linalg.solve(self.M.T, b)
