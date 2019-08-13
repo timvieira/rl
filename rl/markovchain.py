@@ -9,6 +9,7 @@ from arsenal import viz
 class MarkovChain(object):
     "γ-discounted Markov chain."
     def __init__(self, s0, P, gamma):
+        [self.S] = s0.shape
         self.s0 = s0
         self.P = P
         self.gamma = gamma
@@ -45,7 +46,7 @@ class MarkovChain(object):
         # See also: stationarity condition in the linear programming solution
         return linalg.solve(self.M.T, (1-self.gamma) * self.s0)  # note the transpose
 
-    def d_via_eigen(self):
+    def d_by_eigen(self):
         """
         Compute the stationary distribution via eigen methods.
         """

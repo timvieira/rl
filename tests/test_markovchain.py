@@ -3,23 +3,7 @@ import numpy as np
 from scipy import linalg
 from arsenal.maths import random_dist, onehot
 from arsenal import viz
-
-
-def d_via_eigen(P):
-    """
-    Compute the stationary distribution via eigen methods.
-    """
-    [S, U] = linalg.eig(P.T)
-
-    ss = np.argsort(S)
-    S = S[ss]
-    U = U[:,ss]
-
-    s = U[:,-1].real
-    s /= s.sum()
-    return s
-
-
+from rl.markovchain import MarkovChain
 
 
 def test():
@@ -29,16 +13,16 @@ def test():
     p0 = random_dist(S)
     P = random_dist(S,S)
 
-    R = onehot(0, S)
-
-    from notes.rl.mdp import MRP
-    M = MRP(s0=p0, P=P, R=R, gamma=gamma)
-#    A = 1 - M.P_with_reset().T
+    M = MarkovChain(s0=p0, P=P, gamma=gamma)
 
     d = M.d()
-    #d = d_via_eigen(A)
+
+    assert np.allclose(d, M.d_by_eigen())
 
     lc = viz.lc['power']
+
+    lc.baselines = {'eps_mach': np.finfo(np.float64).eps ** 2}
+
     lc.yscale = 'log'
     lc.xscale = 'log'
     for t, x in enumerate(M.d_by_power_iteration(iterations=50), start=1):

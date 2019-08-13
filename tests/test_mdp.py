@@ -4,7 +4,7 @@ from arsenal.maths import compare, onehot, random_dist, is_distribution
 from arsenal import colors, iterview
 ok = colors.green % 'ok'
 
-from notes.rl.mdp import DiscountedMDP, FiniteHorizonMDP, MRP, random_MDP
+from rl.mdp import DiscountedMDP, FiniteHorizonMDP, MRP, random_MDP
 
 
 def test_lp_solver(M):
@@ -363,7 +363,7 @@ def test_J(M):
 def test_stationary(M):
     print('[test stationary]')
     d1 = M.d()
-    d2 = M.d_via_eigen()
+    d2 = M.d_by_eigen()
     assert compare(d1, d2).max_relative_error < 1e-5
 
     J0 = M.J()
