@@ -43,7 +43,7 @@ def test_lp_solver(M):
     D = M.solve_by_lp_dual()
     P = M.solve_by_lp_primal()
 
-    pi = P['policy']
+    π = P['policy']
     assert np.allclose(P['policy'], vi['policy'])
     print('[lp-solver] policy', ok)
 
@@ -53,7 +53,7 @@ def test_lp_solver(M):
 
     d = D['mu'].sum(axis=1)
     assert is_distribution(d), 'stationary distribution is not a valid distribution.'
-    assert compare(D['mu'].sum(axis=1), M.d(pi), verbose=False).max_err < 1e-5
+    assert compare(D['mu'].sum(axis=1), M.d(π), verbose=False).max_err < 1e-5
     print('[lp-solver] stationary distribution', ok)
 
     assert np.allclose(vi['V'], D['V'])
@@ -65,42 +65,42 @@ def test_lp_solver(M):
     print('[dual-lp-solver]', ok)
 
     # Test that the objectives match
-    assert np.allclose(D['obj'], M.J(pi))
-    assert np.allclose(P['obj'], M.J(pi))
+    assert np.allclose(D['obj'], M.J(π))
+    assert np.allclose(P['obj'], M.J(π))
     print('[lp-objectives]', ok)
 
 
 def test_potential_based_shaping(M0):
     S = M0.S; A = M0.A; s0 = M0.s0
 
-    opt_pi = M0.solve()['policy']
+    opt_π = M0.solve()['policy']
 
     # generate a random potential function
-    phi = np.random.uniform(-1, 1, size=S)
+    ϕ = np.random.uniform(-1, 1, size=S)
 
     M1 = M0.copy()    # use a copy!
-    M1.apply_potential_based_shaping(phi)
+    M1.apply_potential_based_shaping(ϕ)
 
     # Check that both methods found the same policy
     original = M0.solve()
     shaped = M1.solve()
     assert np.allclose(shaped['policy'], original['policy'])
 
-    opt_pi = M0.solve()['policy']
+#    opt_π = M0.solve()['policy']
 
-    pi = random_dist(S, A)
+    π = random_dist(S, A)
 
-    v0 = M0.V(pi)
-    v1 = M1.V(pi)
+    v0 = M0.V(π)
+    v1 = M1.V(π)
 
     # Corollary 2 of Ng et al. (1999).
-    assert np.allclose(v0, v1 + phi)
+    assert np.allclose(v0, v1 + ϕ)
 
     # Advantage is invariant to shaping.
-    assert np.allclose(M0.Advantage(pi), M1.Advantage(pi))
+    assert np.allclose(M0.Advantage(π), M1.Advantage(π))
 
     # The difference in J only depends on the initial state
-    assert np.allclose(M0.J(pi), M1.J(pi) + s0 @ phi)
+    assert np.allclose(M0.J(π), M1.J(π) + s0 @ ϕ)
     print('[potential-based shaping] relationship between expected values and value functions', ok)
 
     # shaping with the optimal value function
@@ -109,12 +109,12 @@ def test_potential_based_shaping(M0):
     M2 = M0.copy()  # use a copy of R!
     M2.apply_potential_based_shaping(vstar)
 
-    assert np.allclose(0, M2.V(opt_pi))  # optimal policy as V=0 everywhere and everything else in negative
-    assert (M2.V(pi) <= 0).all()         # suboptimal policies have negative value everywhere
+    assert np.allclose(0, M2.V(opt_π))  # optimal policy as V=0 everywhere and everything else in negative
+    assert (M2.V(π) <= 0).all()         # suboptimal policies have negative value everywhere
 
     # optimal policy in the "optimally shapped MDP" can be found with gamma=0!
     M2.gamma *= 0
-    assert (M2.solve()['policy'] == opt_pi).all()
+    assert (M2.solve()['policy'] == opt_π).all()
 
     # The optimal policy in M2 requires *zero* steps of lookahead (i.e., just
     # optimize immediate reward). The proof is pretty trivial.
@@ -128,10 +128,10 @@ def test_potential_based_shaping(M0):
     #
     # Acting greedily according to A*(s,a) is clearly optimal. Nonetheless, we
     # have an explict test below.
-    assert np.allclose(M2.r, M0.Advantage(opt_pi))
+    assert np.allclose(M2.r, M0.Advantage(opt_π))
     M2_r = M2.r
-    myopic_pi = (M2_r == M2_r.max(axis=1)[:,None]) * 1.0
-    assert np.allclose(myopic_pi, opt_pi)
+    myopic_π = (M2_r == M2_r.max(axis=1)[:,None]) * 1.0
+    assert np.allclose(myopic_π, opt_π)
 
     print('[potential-based shaping] "optimal shaping"', ok)
 
@@ -299,31 +299,31 @@ def test_J(M):
 #    data = []
 #    for _ in range(100):
 #
-#        pi = random_dist(S,A)
+#        π = random_dist(S, A)
 #
-#        j1 = M.J(pi)
-#        j2 = M.V(pi) @ M.s0
+#        j1 = M.J(π)
+#        j2 = M.V(π) @ M.s0
 #
-#        #j3 = M.V(pi) @ M.d(pi)
+#        #j3 = M.V(π) @ M.d(π)
 #
-#        #Adv = M.Advantage(1-pi)
-#        Q = M.Q(1-pi)
-#        V = M.V(1-pi)
+#        #Adv = M.Advantage(1-π)
+#        Q = M.Q(1-π)
+#        V = M.V(1-π)
 #
-#        d = M.d(pi)
-#        #j3 = sum(Adv[s,a] * pi[s,a] * d[s] for s in range(S) for a in range(A))
-#        #j3 = sum((Q[s,a] - V[s]) * pi[s,a] * d[s] for s in range(S) for a in range(A))
-#        #j3 = (sum(Q[s,a] * pi[s,a] * d[s] for s in range(S) for a in range(A))
-#        #      - sum(V[s] * pi[s,a] * d[s] for s in range(S) for a in range(A)))
+#        d = M.d(π)
+#        #j3 = sum(Adv[s,a] * π[s,a] * d[s] for s in range(S) for a in range(A))
+#        #j3 = sum((Q[s,a] - V[s]) * π[s,a] * d[s] for s in range(S) for a in range(A))
+#        #j3 = (sum(Q[s,a] * π[s,a] * d[s] for s in range(S) for a in range(A))
+#        #      - sum(V[s] * π[s,a] * d[s] for s in range(S) for a in range(A)))
 #
-#        j3 = (sum(Q[s,a] * pi[s,a] * d[s] for s in range(S) for a in range(A))
+#        j3 = (sum(Q[s,a] * π[s,a] * d[s] for s in range(S) for a in range(A))
 #              - sum(V[s] * d[s] for s in range(S)))
 #
 #        print()
 #        print(j3 / (1-M.gamma))
-#        print(M.J(pi) - M.J(1-pi))
+#        print(M.J(π) - M.J(1-π))
 #
-#        #j4 = M.R @ M.d(pi) / (1-M.gamma)
+#        #j4 = M.R @ M.d(π) / (1-M.gamma)
 #
 #        data.append({'j1': j1, 'j2': j2, 'j3': j3})
 #
