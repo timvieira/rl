@@ -33,11 +33,11 @@ def test():
 
 def test_lp_solver(M):
     # primary testing strategy is to compare the linear programming solver (LP)
-    # to the value iteration solver (VI). In addition to checking equivalence of
-    # the policies found by each, we also compare equivalence of other
-    # quantities found by the LP. The dual variables should be value functions
-    # (equal to VI's). The primal variables should be the joint state-action
-    # distribution of the policy.
+    # to anther solver (e.g., value iteration or policy iteration). In addition
+    # to checking equivalence of the policies found by each, we also compare
+    # equivalence of other quantities found by the LP. The dual variables should
+    # be value functions (equal to VI's). The primal variables should be the
+    # joint state-action distribution of the policy.
     vi = M.solve_by_policy_iteration()
 
     D = M.solve_by_lp_dual()
@@ -336,40 +336,57 @@ def test_stationary(M):
     print('[test stationary]')
 
     π = random_dist(M.S, M.A)
-    [α, _, γ, r] = M = M | π
+    [_, _, γ, r] = M = M | π
+    T = 1 / (1-γ)
 
     d1 = M.d()
     d2 = M.d_by_eigen()
     assert compare(d1, d2).max_relative_error < 1e-5
 
     J0 = M.J()
+    d0 = M.d()
 
-    if 1:
-        # TODO: Use the simulate method instead of duplicating like we do below.
-        p = np.zeros(M.S)
+    def estimate(N):
+        d = np.zeros(M.S)
         J = 0.0
-        N = 10_000
-        err = []
-        for t, [s, r, _] in zip(iterview(range(1,1+N)), M.run()):
-            p[s] += 1
-            J += r / (1-M.gamma)   # TODO: is this like an importance sampling correction for early stopping?
+        for t, [s, r, _] in enumerate(M.run(), start=1):
+            if t >= N: break
 
-            if t % 5000 == 0:
-                err.append([t, abs(J/t - J0)])
+            d += (onehot(s, M.S) - d) / t
 
-        p /= N
-        J /= N
-        compare(d1, p) #.show()
-        Jmax = M.R.max() / (1-M.gamma)
-        assert abs(J - M.J()) < Jmax/np.sqrt(N)
+            # Note the 'importance sampling correction' T, which accounts for
+            # the (1-γ)-resetting dynamics.
+            J += (r * T - J) / t
 
-        if 0:
-            # Error decays at a rate of 1/sqrt(N)
-            ns, err = np.array(err).T
-            bs = Jmax/np.sqrt(ns)
-            pl.loglog(ns, bs)
-            pl.loglog(ns, err)
-            pl.show()
+            yield [
+                t,
+                0.5*abs(J - J0),
+                0.5*abs(d - d0).sum(),
+            ]
+
+    ns, J_err, d_err = np.array(list(estimate(100000))).T
+
+    dmax = 1
+    Jmax = T * r.max()   # scaled by T because of the importance sampling correction.
+
+    # Very loose bounds on total variation distance
+    J_bnd = Jmax/np.sqrt(ns)
+    d_bnd = M.S*dmax/np.sqrt(ns)
+
+    assert (J_err <= J_bnd).all()
+    assert (d_err <= d_bnd).all()
+
+    if 0:
+        # Error decays at a rate of 1/sqrt(N)
+        pl.title('performance estimate')
+        pl.loglog(ns, J_bnd, label='error bound')
+        pl.loglog(ns, J_err, label='error observed')
+        pl.show()
+
+        pl.title('distribution estimate')
+        pl.loglog(ns, d_bnd, label='error bound')
+        pl.loglog(ns, d_err, label='error observed')
+        pl.show()
 
 
 def test_gradients(M):
