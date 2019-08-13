@@ -358,13 +358,15 @@ def test_stationary(M):
             # the (1-γ)-resetting dynamics.
             J += (r * T - J) / t
 
-            yield [
-                t,
-                0.5*abs(J - J0),
-                0.5*abs(d - d0).sum(),
-            ]
+            if t % 10 == 0:
+                yield [
+                    t,
+                    0.5*abs(J - J0),
+                    0.5*abs(d - d0).sum(),
+                ]
 
-    ns, J_err, d_err = np.array(list(estimate(100000))).T
+
+    ns, J_err, d_err = np.array(list(estimate(1_000_000))).T
 
     dmax = 1
     Jmax = T * r.max()   # scaled by T because of the importance sampling correction.
@@ -376,7 +378,7 @@ def test_stationary(M):
     assert (J_err <= J_bnd).all()
     assert (d_err <= d_bnd).all()
 
-    if 0:
+    if 1:
         # Error decays at a rate of 1/sqrt(N)
         pl.title('performance estimate')
         pl.loglog(ns, J_bnd, label='error bound')
