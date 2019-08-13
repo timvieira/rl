@@ -2,14 +2,16 @@
 https://arxiv.org/abs/1901.11524
 
 
-The value function polytope's line theorem falls out of multi-linearity - same
-as my TACL paper!  And it can probably be extended beyond MDPs.
+Misc notes:
 
-In control theory, there is the thing called "the S-procedure," which is a
-special class of nonconvex quadratically constraint quadratic programs (QCQP)
-that frequently pop up.  What's special about these QCQPs is that the duality
-gap is tight... I suspect that this is closely connected to the nonconvexity in
-RL. I was wondering if you guys had any thoughts?
+ - The value function polytope's line theorem falls out of multi-linearity -
+   same as my TACL paper!  And it can probably be extended beyond MDPs.
+
+ - In control theory, there is the thing called "the S-procedure," which is a
+   special class of nonconvex quadratically constraint quadratic programs (QCQP)
+   that frequently pop up.  What's special about these QCQPs is that the duality
+   gap is tight... I suspect that this is closely connected to the nonconvexity
+   in RL. I was wondering if you guys had any thoughts?
 
 """
 
@@ -147,7 +149,7 @@ def main():
         pl.plot(*np.array([M.V((1-t)*a + t*b) for t in ts]).T, c='orange', lw=2)
 
     # TODO: other interesting things -- trajectories of different algorithms.
-    # one-stepdeviation-based search will walk a bunch of corners --
+    # one-step-deviation-based search will walk a bunch of corners --
     # snake-in-the-box can make it take exp time.  This is probably related to
     # the example used to trick simplex.
 
