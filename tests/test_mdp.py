@@ -284,54 +284,6 @@ def test_J(M):
     print('[test J]', ok)
 
 
-# Again I was trying to understand the error in "J = d * V"
-#    S = 20
-#    A = 2
-#
-#    # Randomly generate and MDP.
-#    M = DiscountedMDP(
-#        s0 = random_dist(S),
-#        R = np.random.uniform(0,1,size=(S,A,S)),
-#        P = random_dist(S,A,S),
-#        gamma = 0.7,
-#    )
-#
-#    data = []
-#    for _ in range(100):
-#
-#        π = random_dist(S, A)
-#
-#        j1 = M.J(π)
-#        j2 = M.V(π) @ M.s0
-#
-#        #j3 = M.V(π) @ M.d(π)
-#
-#        #Adv = M.Advantage(1-π)
-#        Q = M.Q(1-π)
-#        V = M.V(1-π)
-#
-#        d = M.d(π)
-#        #j3 = sum(Adv[s,a] * π[s,a] * d[s] for s in range(S) for a in range(A))
-#        #j3 = sum((Q[s,a] - V[s]) * π[s,a] * d[s] for s in range(S) for a in range(A))
-#        #j3 = (sum(Q[s,a] * π[s,a] * d[s] for s in range(S) for a in range(A))
-#        #      - sum(V[s] * π[s,a] * d[s] for s in range(S) for a in range(A)))
-#
-#        j3 = (sum(Q[s,a] * π[s,a] * d[s] for s in range(S) for a in range(A))
-#              - sum(V[s] * d[s] for s in range(S)))
-#
-#        print()
-#        print(j3 / (1-M.gamma))
-#        print(M.J(π) - M.J(1-π))
-#
-#        #j4 = M.R @ M.d(π) / (1-M.gamma)
-#
-#        data.append({'j1': j1, 'j2': j2, 'j3': j3})
-#
-#    import pandas as pd
-#    df = pd.DataFrame(data)
-#    compare(df.j1, df.j3).show()
-
-
 def test_stationary(M):
     print('[test stationary]')
 
@@ -358,13 +310,12 @@ def test_stationary(M):
             # the (1-γ)-resetting dynamics.
             J += (r * T - J) / t
 
-            if t % 10 == 0:
+            if t % 1000 == 0:
                 yield [
                     t,
                     0.5*abs(J - J0),
                     0.5*abs(d - d0).sum(),
                 ]
-
 
     ns, J_err, d_err = np.array(list(estimate(1_000_000))).T
 
@@ -373,12 +324,9 @@ def test_stationary(M):
 
     # Very loose bounds on total variation distance
     J_bnd = Jmax/np.sqrt(ns)
-    d_bnd = M.S*dmax/np.sqrt(ns)
+    d_bnd = M.S * dmax/np.sqrt(ns)
 
-    assert (J_err <= J_bnd).all()
-    assert (d_err <= d_bnd).all()
-
-    if 1:
+    if 0:
         # Error decays at a rate of 1/sqrt(N)
         pl.title('performance estimate')
         pl.loglog(ns, J_bnd, label='error bound')
@@ -389,6 +337,9 @@ def test_stationary(M):
         pl.loglog(ns, d_bnd, label='error bound')
         pl.loglog(ns, d_err, label='error observed')
         pl.show()
+
+    assert (J_err <= J_bnd).all()
+    assert (d_err <= d_bnd).all()
 
 
 def test_gradients(M):
