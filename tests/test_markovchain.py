@@ -1,7 +1,7 @@
 import pylab as pl
 import numpy as np
 from scipy import linalg
-from arsenal.maths import random_dist, onehot
+from arsenal.maths import random_dist
 from arsenal import viz
 from rl.markovchain import MarkovChain
 

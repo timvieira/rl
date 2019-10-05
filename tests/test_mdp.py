@@ -1,7 +1,15 @@
+"""Tests for various MDP-related bounds and identities (and our implementation
+of those identities).
+
+Note that some tests occasionally fail because of numerical issues. (In most
+cases, these issues could be handled in a more principled way by using the right
+types of numerical tolerances.  Suggestions welcome.)
+
+"""
 import numpy as np
 import pylab as pl
-from arsenal.maths import compare, onehot, random_dist, is_distribution, spherical, fdcheck
-from arsenal import colors, iterview
+from arsenal.maths import assert_equal, compare, onehot, random_dist, is_distribution, spherical, fdcheck
+from arsenal import colors
 ok = colors.green % 'ok'
 
 from rl.mdp import DiscountedMDP, MRP, random_MDP
@@ -136,38 +144,13 @@ def test_potential_based_shaping(M0):
     print('[potential-based shaping] "optimal shaping"', ok)
 
 
+# TODO: PD-lemma as a functional derivative of a policy mixture ∇ₐ J[ (1-α) p + α q ]
+# TODO: PD lemma can be used to give PG thm https://twitter.com/neu_rips/status/1180466116444987392
 def test_performance_difference_lemma_discounted(M):
     """
     Evaluate performance difference of `p` over `q` based on roll-outs from on
     `q` and roll-ins from `p`.
     """
-    # Connection to performance-difference lemma.
-    #
-    # If we take ϕ(s) = Vq(s), the value function an arbitrary policy q,
-    #
-    #   R'(s,a,s') = R(s,a,s') + γ Vq(s') - Vq(s)
-    #
-    # And then take the expectation over s',
-    #
-    #   E_{s'}[ R'(s,a,s') ]
-    #     = E_{s'}[ R(s,a,s') + γ Vq(s') - Vq(s) ]
-    #     = E_{s'}[ R(s,a,s') + γ Vq(s')  ]  - Vq(s)
-    #     = Qq(s,a) - Vq(s).
-    #
-    # We see that the effective reward function is the advantage.
-    #
-    # TODO: Now, the question is what does the action-value function look like after
-    # shaping?
-    #
-    # TODO: There is some discussion in the Ng and Russel papers about the idealized
-    # case of value function (p's value funciton not q's).
-    #
-    #   - I think it's quite simple. When p=q, the advantage is always
-    #     zero. Therefore, variance is zero.
-    #
-    #   - V* is also an interesting case, which is closer to the SEARN case.
-
-    # TODO: PD-lemma and the derivative of a policy mixture.
 
     p = random_dist(M.S, M.A)
     q = random_dist(M.S, M.A)
@@ -179,6 +162,35 @@ def test_performance_difference_lemma_discounted(M):
 
     assert np.allclose(M.J(p) - M.J(q), z)
     print('[pd-lemma]', ok)
+
+
+    # The PD lemma is just potential-based shaping.
+    #   See `test_potential_based_shaping` to read about potential-based shaping.
+    #
+    # Let `ϕ(s) = Vq(s)` where `Vq(s)` is the value function of some policy `q`.
+    # The shaped reward is
+    #
+    #   R'(s,a,s') = R(s,a,s') + γ Vq(s') - Vq(s)
+    #
+    # Now take the expectation over s',
+    #
+    #   E_{s'}[ R'(s,a,s') ]
+    #     = E_{s'}[ R(s,a,s') + γ Vq(s') - Vq(s) ]
+    #     = E_{s'}[ R(s,a,s') + γ Vq(s')  ]  - Vq(s)
+    #     = Qq(s,a) - Vq(s).
+    #     = Aq(s, a)
+    #
+    # We see that the shaped reward function is the advantage of policy `q`.
+
+    ϕ = M.V(q)
+    M1 = M.copy()
+    M1.apply_potential_based_shaping(ϕ)
+
+    assert_equal(M1.J(p), M.J(p) - M.J(q), verbose=True)
+
+    # Sanity check: q should have no advantive over itself.
+    assert abs(M1.J(q)) < 1e-10
+
 
 
 def test_policy_matrix(M):
