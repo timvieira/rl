@@ -56,7 +56,6 @@ def random_MDP(S, A, gamma=0.95, b=None, r=None):
             connected = np.random.choice(states, size=b, replace=False)
             P[s,a,connected] = random_dist(b)
 
-    # TODO: specify how many states get rewards
     R = np.zeros((S,A,S))
     rstates = np.random.choice(states, size=r, replace=False)
     R[rstates,:,:] = np.random.uniform(0,1,r)

@@ -82,11 +82,11 @@ class MarkovChain(object):
 
     @property
     def M(self):
-        "Transition matrix with γ-leaking dynamics."
+        "Transition matrix with leaking dynamics."
         return (np.eye(self.S) - self.gamma * self.P)
 
     def P_with_reset(self):
-        "Transition matrix with (1-γ)-resetting dynamics."
+        "Transition matrix with resetting dynamics."
         return (1-self.gamma)*self.s0[None,:] + self.gamma*self.P
 
     #___________________________________________________________________________

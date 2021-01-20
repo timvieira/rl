@@ -1,6 +1,35 @@
 import numpy as np
 from scipy import linalg
 from rl.markovchain import MarkovChain
+from arsenal.maths import random_dist
+
+
+def random_MRP(S, gamma=0.95, b=None, r=None):
+    if b is None: b = S
+    if r is None: r = S
+
+    P = np.zeros((S,S))
+    states = np.array(list(range(S)))
+
+    #rs = np.random.choice(states, size=r, replace=False)
+
+    for s in range(S):
+        # pick b states to be connected to.
+        connected = np.random.choice(states, size=b, replace=False)
+        P[s,connected] = random_dist(b)
+
+    R = np.zeros(S)
+    rstates = np.random.choice(states, size=r, replace=False)
+    R[rstates] = np.random.uniform(0,1,r)
+
+    M = MRP(
+        s0 = random_dist(S),
+        R = R,
+        P = P,
+        gamma = gamma,
+    )
+
+    return M
 
 
 class MRP(MarkovChain):
