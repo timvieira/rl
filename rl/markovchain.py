@@ -6,13 +6,17 @@ from arsenal.maths import onehot, random_dist, sample
 from arsenal import viz
 
 
-class MarkovChain(object):
+class MarkovChain:
     "γ-discounted Markov chain."
-    def __init__(self, s0, P, gamma):
+    def __init__(self, s0, P, γ):
         [self.S] = s0.shape
         self.s0 = s0
         self.P = P
-        self.gamma = gamma
+        self.γ = γ
+
+    @property
+    def gamma(self):
+        return self.γ
 
     #___________________________________________________________________________
     # Simulation

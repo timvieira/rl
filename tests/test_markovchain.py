@@ -9,11 +9,11 @@ from rl.markovchain import MarkovChain
 def test():
     S = 10
 
-    gamma = 0.7
+    γ = 0.7
     p0 = random_dist(S)
     P = random_dist(S,S)
 
-    M = MarkovChain(s0=p0, P=P, gamma=gamma)
+    M = MarkovChain(s0=p0, P=P, γ=γ)
 
     d = M.d()
 

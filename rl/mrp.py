@@ -4,7 +4,7 @@ from rl.markovchain import MarkovChain
 from arsenal.maths import random_dist
 
 
-def random_MRP(S, gamma=0.95, b=None, r=None):
+def random_MRP(S, γ=0.95, b=None, r=None):
     if b is None: b = S
     if r is None: r = S
 
@@ -22,28 +22,25 @@ def random_MRP(S, gamma=0.95, b=None, r=None):
     rstates = np.random.choice(states, size=r, replace=False)
     R[rstates] = np.random.uniform(0,1,r)
 
-    M = MRP(
+    return MRP(
         s0 = random_dist(S),
         R = R,
         P = P,
-        gamma = gamma,
+        γ = γ,
     )
-
-    return M
 
 
 class MRP(MarkovChain):
     "Markov reward process is Markov chain with a state-dependent reward function."
 
-    def __init__(self, s0, P, R, gamma):
-        super(MRP, self).__init__(s0, P, gamma)
+    def __init__(self, s0, P, R, γ):
+        super(MRP, self).__init__(s0, P, γ)
         self.R = R
-        self.gamma = gamma
         [self.S, _] = P.shape
         assert R.ndim == 1 and R.shape[0] == P.shape[0] == P.shape[1]
 
     def __iter__(self):
-        return iter([self.s0, self.P, self.gamma, self.R])
+        return iter([self.s0, self.P, self.γ, self.R])
 
     #___________________________________________________________________________
     # Simulation
@@ -80,7 +77,7 @@ class MRP(MarkovChain):
         return resid @ resid
 
     def bellman_residual(self, v):
-        return (self.R + self.gamma*self.P @ v) - v
+        return (self.R + self.γ*self.P @ v) - v
 
     #___________________________________________________________________________
     # Properties
@@ -92,7 +89,7 @@ class MRP(MarkovChain):
 
         The quantity is upper bounded by
 
-        H(epsilon) <= log_\gamma( epsilon * (1-gamma) / Rmax )
+        H(epsilon) <= log_γ( epsilon * (1-γ) / Rmax )
 
         """
         t = 0

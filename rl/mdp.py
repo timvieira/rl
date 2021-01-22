@@ -7,17 +7,17 @@ from scipy import linalg
 from rl.mrp import MRP
 
 
-#def random_MDP(S, A, gamma):
+#def random_MDP(S, A, γ):
 #    "Randomly generate an MDP."
 #    return DiscountedMDP(
 #        s0 = random_dist(S),
 #        R = np.random.uniform(0,1,size=(S,A,S)),
 #        P = random_dist(S,A,S),
-#        gamma = gamma,
+#        γ = γ,
 #    )
 
 
-def random_MDP(S, A, gamma=0.95, b=None, r=None):
+def random_MDP(S, A, γ=0.95, b=None, r=None):
     """Randomly generated MDP
 
     Text taken from http://www.jmlr.org/papers/volume15/geist14a/geist14a.pdf
@@ -64,7 +64,7 @@ def random_MDP(S, A, gamma=0.95, b=None, r=None):
         s0 = random_dist(S),
         R = R,
         P = P,
-        gamma = gamma,
+        γ = γ,
     )
 
     return M
@@ -91,8 +91,8 @@ class FiniteHorizonMDP(MDP):
         super(FiniteHorizonMDP, self).__init__(s0, P, R)
         self.T = T
 
-    def value(self, policy):
-        "Compute `T`-step value functions for `policy`."
+    def value(self, π):
+        "Compute `T`-step value functions for policy `π`."
         S = self.S; A = self.A; P = self.P; R = self.R; T = self.T
         Q = np.zeros((T+1,S,A))
         V = np.zeros((T+1,S))
@@ -100,38 +100,42 @@ class FiniteHorizonMDP(MDP):
             for s in range(S):
                 for a in range(A):
                     Q[t,s,a] = P[s,a,:] @ (R[s,a,:] + V[t+1,:])
-                V[t,s] = policy[s,:] @ Q[t,s,:]
+                V[t,s] = π[s,:] @ Q[t,s,:]
         J = self.s0 @ V[0,:]
         # Value functions: No conditioning, state conditioned, state-action conditioned
         return J, V, Q
 
-    def d(self, policy):
-        "Probability of state `s` under the given `policy` conditioned on each time `t <= T`."
+    def d(self, π):
+        "Probability of state `s` under the given policy `π` conditioned on each time `t <= T`."
         S = self.S; A = self.A; P = self.P; T = self.T
         d = np.zeros((T, S))
         d[0,:] = self.s0
         for t in range(1, T):
             for sp in range(S):
-                d[t,sp] = sum(d[t-1,s] * policy[s,a] * P[s,a,sp] for s in range(S) for a in range(A))
+                d[t,sp] = sum(d[t-1,s] * π[s,a] * P[s,a,sp] for s in range(S) for a in range(A))
             d[t] /= d[t].sum()   # normalized per-time step.
         return d
 
 
 class DiscountedMDP(MDP):
     "γ-discounted, infinite-horizon Markov decision process."
-    def __init__(self, s0, P, R, gamma):
+    def __init__(self, s0, P, R, γ):
         # γ: Temporal discount factor
         super(DiscountedMDP, self).__init__(s0, P, R)
-        self.gamma = gamma
+        self.γ = γ
+
+    @property
+    def gamma(self):
+        return self.γ
 
     def __iter__(self):
-        return iter((self.s0, self.P, self.R, self.gamma))
+        return iter((self.s0, self.P, self.R, self.γ))
 
     def copy(self):
         return DiscountedMDP(self.s0.copy(),
                              self.P.copy(),
                              self.R.copy(),
-                             self.gamma * 1)
+                             self.γ * 1)
 
     #___________________________________________________________________________
     # Simulation
@@ -154,10 +158,23 @@ class DiscountedMDP(MDP):
             yield s,a,r,sp
             s = sp
 
+    def run_terminating(self, π, s=None, a=None):
+        "Simulation is under (1-γ)-termination dynamics."
+        if s is None: s = sample(self.s0)
+        if a is None: a = π(s)
+        while True:
+            sp = sample(self.P[s, a, :])
+            r = self.R[s,a,sp]
+            yield (s,a,r)
+            if np.random.uniform(0,1) <= (1-self.γ):
+                return
+            s = sp
+            a = π(s)
+
     def step(self, s, a):
         sp = sample(self.P[s,a,:])
         r = self.R[s,a,sp]
-        if uniform(0,1) <= 1-self.gamma:
+        if uniform(0,1) <= 1-self.γ:
             sp = self.start()
         return r, sp
 
@@ -167,12 +184,12 @@ class DiscountedMDP(MDP):
     #___________________________________________________________________________
     # Conditioning
 
-    def mrp(self, policy):
-        "MDP becomes an `MRP` when we condition on `policy`."
+    def mrp(self, π):
+        "MDP becomes an `MRP` when we condition on policy `π`."
         return MRP(self.s0,
-                   np.einsum('sa,sap->sp', policy, self.P),
-                   np.einsum('sa,sap,sap->s', policy, self.P, self.R),
-                   self.gamma)
+                   np.einsum('sa,sap->sp', π, self.P),
+                   np.einsum('sa,sap,sap->s', π, self.P, self.R),
+                   self.γ)
 
     __or__ = mrp   # alias M | π
 
@@ -189,7 +206,7 @@ class DiscountedMDP(MDP):
         if not jac:
             return (self | π).d()
         else:
-            γ = self.gamma
+            γ = self.γ
             Φ = self.successor_representation(π)
             d = (1-γ) * self.s0 @ Φ
 
@@ -205,7 +222,7 @@ class DiscountedMDP(MDP):
             return (self | π).V()
 
         else:
-            γ = self.gamma
+            γ = self.γ
             Φ = self.successor_representation(π)
             r = np.einsum('sa,sa->s', self.r, π)
             v = Φ @ r
@@ -217,7 +234,7 @@ class DiscountedMDP(MDP):
 
         return v
 
-    def successor_representation(self, policy):
+    def successor_representation(self, π):
         "Dayan's successor representation."
         # The M matrix in Wang et al. (2008).
         # M = (1-γ)I + γ Π P M
@@ -225,12 +242,12 @@ class DiscountedMDP(MDP):
         # TODO: implement the H matrix which is similar to M.  That matrix is
         # important to the policy improvement algs in this dual representation.
 
-        return (self | policy).successor_representation()
+        return (self | π).successor_representation()
 
-    def Q(self, policy):
-        "Compute the action-value function `Q(s,a)` for a policy."
+    def Q(self, π):
+        "Compute the action-value function `Q(s,a)` for a π."
         # See also: Q_by_linalg
-        return self.Q_from_V((self | policy).V())
+        return self.Q_from_V((self | π).V())
 
     def Q_by_linalg(self, π):
         """
@@ -246,7 +263,7 @@ class DiscountedMDP(MDP):
 
     def M(self, π):
         P = self.P.reshape((self.S*self.A, self.S))
-        return np.eye(self.S*self.A) - self.gamma * P @ self.Π(π)
+        return np.eye(self.S*self.A) - self.γ * P @ self.Π(π)
 
     def Advantage(self, π):
         "Advantage function for policy π."
@@ -282,7 +299,7 @@ class DiscountedMDP(MDP):
         "Transition matrix with (1-γ)-resetting dynamics."
         # TODO: we might need to be careful when using this to make sure that
         # the reward is given before the state is restarted.
-        return (1-self.gamma)*self.s0[None,None,:] + self.gamma*self.P
+        return (1-self.γ)*self.s0[None,None,:] + self.γ*self.P
 
     #___________________________________________________________________________
     # Operators
@@ -321,16 +338,16 @@ class DiscountedMDP(MDP):
         Q = np.zeros((self.S, self.A))
         for s in range(self.S):
             for a in range(self.A):
-                Q[s,a] = r[s,a] + self.gamma*self.P[s,a,:] @ V
+                Q[s,a] = r[s,a] + self.γ*self.P[s,a,:] @ V
         return Q
 
     def bellman_residual(self, V):
         "The control case of the Bellman residual."
         return self.Q_from_V(V) - V[:,None]
 
-    def apply_potential_based_shaping(self, phi):
+    def apply_potential_based_shaping(self, ϕ):
         "Apply potential-based reward shaping"
-        self.R[...] = self.shaped_reward(phi)
+        self.R[...] = self.shaped_reward(ϕ)
         self.r[...] = np.einsum('sap,sap->sa', self.P, self.R)
 
     def shaped_reward(self, ϕ):
@@ -339,17 +356,17 @@ class DiscountedMDP(MDP):
         term:  R'(s,a,s') = R(s,a,s') + γ ϕ(s') - ϕ(s)
         """
         # See also: performance-difference lemma
-        γ = self.gamma
+        γ = self.γ
         return self.R + γ*ϕ[None,None,:] - ϕ[:,None,None]
 
     #___________________________________________________________________________
     # Algorithms
 
-    def solve_by_policy_iteration(self):
+    def solve_by_policy_iteration(self, max_iter=50):
         "Solve the MDP with the policy iteration algorithm."
         V = np.zeros(self.S)
         π_prev = np.zeros((self.S, self.A))
-        for _ in range(50):
+        for _ in range(max_iter):
             # Policy iteration does not take the value function from Bellman
             # operator (the variable `_` below). Instead, it uses the greedy
             # policy. (the greedy value function doesn't satisfy the first
@@ -360,6 +377,8 @@ class DiscountedMDP(MDP):
                                # Note: the value function returned by `B` is not the same as policy evaluation
             if (π_prev == π).all(): break
             π_prev = π
+        else:
+            print(f'Warning: policy iteration did not converge in {max_iter} iterations.')
         return {
             'obj': V @ self.s0,
             'policy': π,
@@ -374,7 +393,7 @@ class DiscountedMDP(MDP):
             if np.abs(V1 - V).max() < tol: break
             V = V1
         # Bounding the difference ||V_t - V_{t-1}||_inf < tol
-        # bounds ||V_{greedy policy wrt V_t} - V*||_inf < 2*tol*\gamma/(1-\gamma),
+        # bounds ||V_{greedy policy wrt V_t} - V*||_inf < 2*tol*γ/(1-γ),
         # which is a more meaningful bound.
         return {
             'obj': V @ self.s0,
@@ -403,7 +422,7 @@ class DiscountedMDP(MDP):
         # References:
         # http://www.cs.cmu.edu/afs/cs/academic/class/15780-s16/www/slides/mdps.pdf
 
-        P = self.P; S = list(range(self.S)); A = list(range(self.A)); γ = self.gamma; r = self.r
+        P = self.P; S = list(range(self.S)); A = list(range(self.A)); γ = self.γ; r = self.r
 
         # Declare optimization variables (and constrain. μ(s,a) ≥ 0).
         μ = cp.Variable(shape=(self.S, self.A), nonneg=True)
@@ -455,7 +474,7 @@ class DiscountedMDP(MDP):
 
     def solve_by_lp_primal(self):
         "Solve the MDP by primal linear programming (Wang et al., 2008; Manne, 1960)."
-        P = self.P; S = list(range(self.S)); A = list(range(self.A)); γ = self.gamma; r = self.r
+        P = self.P; S = list(range(self.S)); A = list(range(self.A)); γ = self.γ; r = self.r
 
         V = cp.Variable(shape=self.S)  # note: no lb
 
