@@ -33,7 +33,7 @@ class MarkovChain:
         return sample(self.s0)
 
     def step(self, s):
-        if np.random.uniform(0,1) <= 1-self.gamma:
+        if np.random.uniform(0,1) <= 1-self.γ:
             return self.start()
         return sample(self.P[s,:])
 
@@ -53,45 +53,47 @@ class MarkovChain:
         #   d - γ Pᵀ d = (1-γ) s0
         # (I - γ Pᵀ) d = (1-γ) s0
         # See also: stationarity condition in the linear programming solution
-        return (1-self.gamma) * self.solve_t(self.s0)   # note the transpose
+        return (1-self.γ) * self.solve_t(self.s0)   # note the transpose
 
     def d_by_eigen(self):
         """
-        Compute the stationary distribution via eigen methods.
+        Compute the stationary distribution with resetting dynamics via eigen-decomposition methods.
         """
-        # Markov chain has this transition matrix, which makes the transition to
-        # the start state explicit.
         t = self.P_with_reset()          # TODO: compare with transition to an absorbing state.
+        return self.stationary(t)
 
+    @staticmethod
+    def stationary(P):
         # Transition matrix is from->to, so it sum-to-one over rows so we
         # transpose it.  Alternatively, we can get do the left eig decomp.
-        [S, U] = linalg.eig(t.T)
-
+        [S, U] = np.linalg.eig(P.T)
         ss = np.argsort(S)
         S = S[ss]
         U = U[:,ss]
-
         s = U[:,-1].real
         s /= s.sum()
         return s
 
+    def d_direct(self):
+        "Stationary distribution without resetting or absorbing"
+        return self.stationary(self.P)
+
     def d_by_power_iteration(self, b0=None, iterations=1000):
         "Produce the sequence iterates of power iterations."
-        A = self.P_with_reset().T
+        A = self.P_with_reset()
         b = b0 if b0 is not None else self.s0
         for _ in range(iterations):
-            b = A @ b
+            b = b @ A
             b /= np.sum(b)
             yield b
 
     @property
     def M(self):
-        "Transition matrix with leaking dynamics."
-        return (np.eye(self.S) - self.gamma * self.P)
+        return (np.eye(self.S) - self.γ * self.P)
 
     def P_with_reset(self):
         "Transition matrix with resetting dynamics."
-        return (1-self.gamma)*self.s0[None,:] + self.gamma*self.P
+        return (1-self.γ)*self.s0[None,:] + self.γ*self.P
 
     #___________________________________________________________________________
     # Operators

@@ -45,6 +45,10 @@ class MRP(MarkovChain):
     #___________________________________________________________________________
     # Simulation
 
+    # XXX: create strategies for handling the continuation / termination /
+    # resetting.  Perhaps, the cleanest ways it to have different reductions to
+    # the Markov chain.  In the reductions, the <action, reward> are an extra
+    # bookkeeping function like they are in semirings.
     def run(self):
         "Simulate the MRP"
         s = self.start()

@@ -140,46 +140,59 @@ class DiscountedMDP(MDP):
     #___________________________________________________________________________
     # Simulation
 
-    # TODO: this method does not belong on this class. It should be part of some
-    # sort of a learning agent base class.
-    def learn(self, learner, max_iterations=None, callback=None, verbosity=False):
-        for t,(s,a,r,sp) in enumerate(self.run(learner), start=1):
-            if t >= max_iterations: break
-            if learner.update(s, a, r, sp): break
-            if verbosity and t % verbosity == 0:
-                callback(t, learner)
+    # XXX: add analogous methods to Markov chain
+    def simulate(self, π, s=None, a=None, mode='direct'):
+        """Simulation is under various `modes` -- i.e., interpretations of γ:
 
-    def run(self, π):
-        "Simulation is under (1-γ)-resetting dynamics."
-        s = self.start()
-        while True:
-            a = π(s)
-            r, sp = self.step(s, a)
-            yield s,a,r,sp
-            s = sp
+        - "direct": episodes never terminate and might not mix (i.e., get stuck
+          in a subset of the state space if the underlying Markov chain is not
+          ergodic conditioned on π).
 
-    def run_terminating(self, π, s=None, a=None):
-        "Simulation is under (1-γ)-termination dynamics."
+        - "terminate": with probability (1-γ) the episode terminates.
+
+        - "reset": with probability (1-γ) we reset the trajectory to an initial
+          state drawn from `s0`.
+
+        """
+        # Coerce arrays into functions
+        if isinstance(π, np.ndarray): π = lambda s, π=π: sample(π[s,:])
+        assert mode in ('direct', 'terminate', 'reset'), mode
         if s is None: s = sample(self.s0)
         if a is None: a = π(s)
         while True:
-            sp = sample(self.P[s, a, :])
-            r = self.R[s,a,sp]
+            sp = sample(self.P[s,a,:])
+            r = self.R[s,a,sp]            # this is consistent with r[s,a] = E[R[s,a,s']]
             yield (s,a,r)
-            if np.random.uniform(0,1) <= (1-self.γ):
-                return
+            if mode != 'direct':
+                if np.random.uniform(0,1) <= (1-self.γ):
+                    if mode == 'terminate':
+                        return
+                    else:
+                        sp = sample(self.s0)
             s = sp
             a = π(s)
 
-    def step(self, s, a):
-        sp = sample(self.P[s,a,:])
-        r = self.R[s,a,sp]
-        if uniform(0,1) <= 1-self.γ:
-            sp = self.start()
-        return r, sp
+#    # TODO: this method does not belong on this class. It should be part of some
+#    # sort of a learning agent base class.
+#    def learn(self, learner, max_iterations=None, callback=None, verbosity=False):
+#        for t,(s,a,r,sp) in enumerate(self.run(learner), start=1):
+#            if t >= max_iterations: break
+#            if learner.update(s, a, r, sp): break
+#            if verbosity and t % verbosity == 0:
+#                callback(t, learner)
 
-    def start(self):
-        return sample(self.s0)
+#    def run(self, π, s=None, a=None):
+#        yield from self.simulate(π, s=s, a=a, mode='reset')
+
+#    def step(self, s, a):
+#        sp = sample(self.P[s,a,:])
+#        if uniform(0,1) <= 1-self.γ:
+#            sp = self.start()
+#        r = self.R[s,a,sp]
+#        return r, sp
+#
+#    def start(self):
+#        return sample(self.s0)
 
     #___________________________________________________________________________
     # Conditioning
@@ -234,15 +247,32 @@ class DiscountedMDP(MDP):
 
         return v
 
-    def successor_representation(self, π):
+    def successor_representation(self, π, normalize=False):
         "Dayan's successor representation."
-        # The M matrix in Wang et al. (2008).
-        # M = (1-γ)I + γ Π P M
+        F = (self | π).successor_representation()
+        if normalize: F /= (1 - self.γ)
+        return F
 
-        # TODO: implement the H matrix which is similar to M.  That matrix is
-        # important to the policy improvement algs in this dual representation.
+    def sasa_matrix(self, π, normalize=True):
+        # TODO: create a general operation that conditions the MDP on π such
+        # that we get a Markov reward process with states that are the
+        # state--action pairs of the MDP.
+        #
+        #   Under that view, This method computes the equivalent of the
+        #   normalized successor reorientation of the Markov chain.
+        #
+        # Wang normalizes, we make that optional.
+        # Without normalizatoin,
+        #   Q[i,a] = sum(W[i,a,k,b] * R[k,b] for k in S for b in A))
+        # With normalizaiton, we have to divide the rhs by (1-γ)
 
-        return (self | π).successor_representation()
+        S, A = self.S, self.A
+        # Wang08's H matrix, H = (1-γ)I + γ Π P H   [ normalized case]
+        I = np.eye(S*A)
+        H = linalg.inv(I - self.γ * self.P.reshape(S*A, S) @ self.Π(π))
+        H = H.reshape((S, A, S, A))
+        if normalize: H /= (1 - self.γ)
+        return H
 
     def Q(self, π):
         "Compute the action-value function `Q(s,a)` for a π."
