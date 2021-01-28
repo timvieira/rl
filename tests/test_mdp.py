@@ -28,6 +28,9 @@ def random_mrp(S, γ=0.3):
 def test():
     M = random_MDP(20, 5, 0.7)
 
+    test_dual_representation(M)
+    print('done')
+
     test_solve(M)
     test_policy_matrix(M)
     test_stationary(M)
@@ -37,6 +40,54 @@ def test():
     test_gradients(M)
     test_smooth(M)
     test_J(M)
+
+
+def test_dual_representation(mdp):
+    # Wang et al. 2008. "Dual Representations for Dynamic Programming" JMLR.
+    # https://webdocs.cs.ualberta.ca/~dale/papers/dualdp.pdf
+
+    S = range(mdp.S); A = range(mdp.A)
+    γ = mdp.γ
+
+    π = random_dist(mdp.S, mdp.A)
+    Q = mdp.Q(π)
+    V = mdp.V(π)
+    R = mdp.r
+    P = mdp.P
+
+    Π = mdp.Π(π)
+
+    # Wang08's H matrix, which I'll call W, is a Markov chain over (s,a) ->
+    # (s'', a'')
+    W = mdp.sasa_matrix(π, normalize=True)
+    F = mdp.successor_representation(π, normalize=True)
+
+    # Lemma 4
+    assert np.all(F >= 0)
+    assert np.allclose(1.0, np.einsum('ik->i', F))
+
+    # Lemma 10 W ≥ 0 and W @ 1 = 1
+    assert np.all(W >= 0)
+    assert np.allclose(1.0, np.einsum('iakc->ia', W))
+
+    # Q as a function of W
+    assert np.allclose(Q*(1-γ), np.einsum('iakb,kb->ia',W,R))
+
+    # Check that W solves our equations
+    for k in S:
+        for c in A:
+            for i in S:
+                for a in A:
+                    np.allclose(
+                        W[i,a,k,c],
+                        (1-γ)*((i,a)==(k,c)) + γ*sum(W[j,b,k,c] * π[j,b] * P[i,a,j] for j in S for b in A)
+                    )
+
+    # Lemma 13
+    assert np.allclose(V, Π @ Q.flat)
+
+    # Lemma 14
+    assert np.allclose(F @ Π, Π @ W.reshape(mdp.S*mdp.A, mdp.S*mdp.A))
 
 
 def test_lp_solver(M):

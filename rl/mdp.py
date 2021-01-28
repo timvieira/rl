@@ -128,6 +128,11 @@ class DiscountedMDP(MDP):
     def gamma(self):
         return self.γ
 
+    def check(self):
+        assert 0 < self.γ < 1
+        assert np.allclose(self.s0.sum(), 1)
+        assert np.allclose(np.einsum('iak->ia', self.P), 1)
+
     def __iter__(self):
         return iter((self.s0, self.P, self.R, self.γ))
 
@@ -247,11 +252,9 @@ class DiscountedMDP(MDP):
 
         return v
 
-    def successor_representation(self, π, normalize=False):
+    def successor_representation(self, π, **kwargs):
         "Dayan's successor representation."
-        F = (self | π).successor_representation()
-        if normalize: F /= (1 - self.γ)
-        return F
+        return (self | π).successor_representation(**kwargs)
 
     def sasa_matrix(self, π, normalize=True):
         # TODO: create a general operation that conditions the MDP on π such
@@ -269,9 +272,11 @@ class DiscountedMDP(MDP):
         S, A = self.S, self.A
         # Wang08's H matrix, H = (1-γ)I + γ Π P H   [ normalized case]
         I = np.eye(S*A)
-        H = linalg.inv(I - self.γ * self.P.reshape(S*A, S) @ self.Π(π))
+        if normalize:
+            H = linalg.solve(I - self.γ * self.P.reshape(S*A, S) @ self.Π(π), I * (1 - self.γ))
+        else:
+            H = linalg.solve(I - self.γ * self.P.reshape(S*A, S) @ self.Π(π), I)
         H = H.reshape((S, A, S, A))
-        if normalize: H /= (1 - self.γ)
         return H
 
     def Q(self, π):

@@ -18,6 +18,11 @@ class MarkovChain:
     def gamma(self):
         return self.γ
 
+    def check(self):
+        assert 0 < self.γ < 1
+        assert np.allclose(self.s0.sum(), 1)
+        assert np.allclose(np.einsum('iak->ia', self.P), 1)
+
     #___________________________________________________________________________
     # Simulation
 
@@ -40,10 +45,10 @@ class MarkovChain:
     #___________________________________________________________________________
     # Important quantities
 
-    def successor_representation(self):
+    def successor_representation(self, normalize=False):
         "Dayan's successor representation."
-        #equivalently: linalg.solve(self.M, np.eye(self.S))
-        return np.linalg.inv(self.M)
+        return linalg.solve(self.M, np.eye(self.S) * ((1-self.γ) if normalize else 1))
+#        return np.linalg.inv(self.M)
 
     def d(self):
         "Stationary distribution."
